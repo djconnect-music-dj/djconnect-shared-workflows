@@ -1,0 +1,34 @@
+name: DJConnect shared CodeQL CI
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: Comma-separated CodeQL language list, for example "python" or "javascript-typescript".
+        required: false
+        type: string
+        default: "python"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  software-assurance-governance:
+    name: Software Assurance governance
+    permissions:
+      contents: read
+    uses: djconnect-music-dj/djconnect-shared-workflows/.github/workflows/software-assurance-governance-631f.yml@93754e9cb2253e8ec06e3255340ac372192493a8
+    with:
+      execution_profile: balanced
+      owner: ${{ github.repository }}
+
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          languages: ${{ inputs.languages }}
+      - uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
