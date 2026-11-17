@@ -81,6 +81,7 @@ jobs:
         env:
           EXECUTION_PROFILE: ${{ inputs.execution_profile }}
           OWNER: ${{ inputs.owner }}
+          POLICY_REPOSITORY: ${{ steps.canonical-source.outputs.repository }}
         run: |
           {
             echo "## Software Assurance governance"
@@ -88,5 +89,5 @@ jobs:
             echo "- Policy: \`djconnect.software_assurance.ci_governance@1.0.0\`"
             echo "- Execution profile: \`${EXECUTION_PROFILE}\`"
             echo "- Owner: \`${OWNER}\`"
-            echo "- Policy source: \`pcvantol/djconnect@3fc4f0835fe4068b73a30c7fb2db3318600a3f6f\`"
+            echo "- Policy source: \`${POLICY_REPOSITORY}@631f0b893a537807dfc59a6e69e413703a2eebdd\`"
           } >> "$GITHUB_STEP_SUMMARY"
