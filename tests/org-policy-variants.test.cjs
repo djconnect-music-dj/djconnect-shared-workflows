@@ -42,7 +42,9 @@ test('distribution collector fails closed for invalid pagination',()=>{
   const file=variants[1][0];
   const req=collect(file,'success','distribution');
   assert.equal(req.post_merge.distribution_integrity,'PASS');
-  for (const scenario of ['malformed-link','hostile-link','unknown-relation','wrong-page','extra-query','association-error']) {
+  const two = collect(file,'repository-id-pages','distribution');
+  assert.deepEqual(two.originating_pr.main_changed_files,['x.py','y.py']);
+  for (const scenario of ['malformed-link','hostile-link','unknown-relation','wrong-page','extra-query','association-error','wrong-repository-id','wrong-commit-id']) {
     assert.throws(()=>collect(file,scenario,'distribution'));
   }
   const ambiguous=collect(file,'ambiguous-pr','distribution');
