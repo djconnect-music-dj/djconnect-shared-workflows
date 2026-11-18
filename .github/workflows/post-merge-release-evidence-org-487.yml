@@ -92,6 +92,8 @@ jobs:
             const fs = require("fs");
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const repoId = context.payload.repository?.id;
+            if (!Number.isSafeInteger(repoId) || repoId <= 0) throw new Error("Repository identity unavailable");
             const mainSha = process.env.MAIN_SHA;
             const repositoryRole = process.env.REPOSITORY_ROLE;
             if (!["active_source", "release_source", "distribution"].includes(repositoryRole)) {
@@ -140,7 +142,7 @@ jobs:
                 if (nextUrl.protocol !== "https:" || nextUrl.hostname !== "api.github.com" || nextUrl.port ||
                     nextUrl.username || nextUrl.password || nextUrl.hash ||
                     [...nextUrl.searchParams.keys()].some(key => key !== "page" && key !== "per_page") ||
-                    nextUrl.pathname !== `/repos/${owner}/${repo}/commits/${sha}` ||
+                    ![`/repos/${owner}/${repo}/commits/${sha}`, `/repositories/${repoId}/commits/${sha}`].includes(nextUrl.pathname) ||
                     nextUrl.searchParams.getAll("page").length !== 1 || nextUrl.searchParams.get("page") !== String(page + 1) ||
                     nextUrl.searchParams.getAll("per_page").length !== 1 || nextUrl.searchParams.get("per_page") !== "100")
                   throw new Error("Unexpected commit pagination URL");
@@ -175,8 +177,6 @@ jobs:
             const ownerStatus = contextNodes.find(item => item.__typename === "StatusContext" && item.context === "Owner Authorization");
             const risk = ownerStatus?.description?.startsWith("HIGH_RISK") ? "HIGH_RISK" : "NORMAL_RISK";
             // A name alone cannot bind CI or artifacts to the required execution.
-            const repoId = context.payload.repository?.id;
-            if (!Number.isSafeInteger(repoId) || repoId <= 0) throw new Error("Repository identity unavailable");
             const readRuns = () => github.paginate(github.rest.actions.listWorkflowRunsForRepo, {owner, repo, head_sha: mainSha, per_page: 100});
             function newestRun(runs) {
               const candidates = runs.filter(run => run.name === process.env.REQUIRED_MAIN_WORKFLOW && run.head_sha === mainSha && run.event === "push" && run.head_branch === "main");
