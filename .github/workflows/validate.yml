@@ -10,3 +10,5 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Verify trusted delivery bytes
         run: echo "2265c07c075a93504602390ec9c60d40d6ed0643d5235b48002172d1771c2dfc  .github/workflows/trusted-delivery-qualification.yml" | sha256sum --check
+      - name: Test evidence provenance fallback
+        run: node --test tests/evidence-pr-fallback.test.cjs
