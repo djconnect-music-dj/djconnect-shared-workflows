@@ -1,0 +1,209 @@
+name: DJConnect shared Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version for the CI runner.
+        required: false
+        type: string
+        default: "3.11"
+      test-command:
+        description: Command used to run the repository test suite.
+        required: false
+        type: string
+        default: "python -m unittest discover -s tests"
+      source-path:
+        description: Python source path scanned by Ruff and Bandit.
+        required: false
+        type: string
+        default: "custom_components/djconnect"
+      test-path:
+        description: Test path scanned by Ruff.
+        required: false
+        type: string
+        default: "tests"
+      run-tests:
+        description: Run the test command.
+        required: false
+        type: boolean
+        default: true
+      run-ruff:
+        description: Run Ruff linting.
+        required: false
+        type: boolean
+        default: true
+      ruff-continue-on-error:
+        description: Report Ruff results without failing the workflow.
+        required: false
+        type: boolean
+        default: false
+      run-bandit:
+        description: Run Bandit security checks.
+        required: false
+        type: boolean
+        default: true
+      bandit-continue-on-error:
+        description: Report Bandit results without failing the workflow.
+        required: false
+        type: boolean
+        default: false
+      run-dependency-audit:
+        description: Report available updates for Python dependencies and CI tools.
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  software-assurance-governance:
+    name: Software Assurance governance / Validate canonical governance policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - id: canonical-source
+        name: Resolve canonical policy repository by immutable ID
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const result = await github.request("GET /repositories/{repository_id}", {repository_id: 1461539726});
+            const repo = result.data;
+            if (repo.id !== 1461539726 || repo.private !== false || repo.full_name !== "djconnect-music-dj/.github") throw new Error("Unexpected canonical policy repository identity");
+            core.setOutput("repository", repo.full_name);
+
+      - name: Check out pinned canonical policy source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: ${{ steps.canonical-source.outputs.repository }}
+          ref: 89a2a8b4c7571965249bed745bf7c5c37a1221f1
+          path: canonical-governance
+
+      - name: Check out caller workflow source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: caller-workflow-source
+
+      - name: Validate policy and selected execution profile
+        working-directory: canonical-governance/policy-snapshots/governance-631f
+        env:
+          EXECUTION_PROFILE: balanced
+          OWNER: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python -m tools.software_assurance.validate
+          python - <<'PY'
+          import os
+
+          from tools.software_assurance.policy import validate_rollout_candidate
+
+          findings = validate_rollout_candidate(
+              {
+                  "name": os.environ["OWNER"],
+                  "execution_profile": os.environ["EXECUTION_PROFILE"],
+                  "policy_version": "1.0.0",
+                  "timeout_minutes": 10,
+                  "permissions": {"contents": "read"},
+                  "concurrency_group": "software-assurance-governance",
+                  "action_pinning": "full_length_commit_sha",
+              }
+          )
+          if findings:
+              raise SystemExit("; ".join(findings))
+          PY
+
+      - name: Require Node 24 or newer for pinned JavaScript actions
+        working-directory: canonical-governance/policy-snapshots/governance-631f
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m tools.software_assurance.validate_action_runtimes ../../../caller-workflow-source
+
+      - name: Publish governance summary
+        env:
+          EXECUTION_PROFILE: balanced
+          OWNER: ${{ github.repository }}
+        run: |
+          {
+            echo "## Software Assurance governance"
+            echo
+            echo "- Policy: \`djconnect.software_assurance.ci_governance@1.0.0\`"
+            echo "- Execution profile: \`${EXECUTION_PROFILE}\`"
+            echo "- Owner: \`${OWNER}\`"
+            echo "- Policy source: \`djconnect-music-dj/.github@89a2a8b4c7571965249bed745bf7c5c37a1221f1\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  dependency-audit:
+    if: inputs.run-dependency-audit
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Report dependency and tool update candidates
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt || true
+          elif [ -f pyproject.toml ]; then
+            python -m pip install . || true
+          else
+            echo "No requirements.txt or installable pyproject.toml found; checking CI tools only."
+          fi
+          echo
+          echo "Outdated installed Python packages, if any:"
+          python -m pip list --outdated --format=columns || true
+          echo
+          echo "Latest CI tool versions visible to pip:"
+          python -m pip index versions ruff || true
+          python -m pip index versions bandit || true
+
+  tests:
+    if: inputs.run-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Run tests
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then
+            python -m pip install -r requirements-dev.txt
+          fi
+          ${{ inputs.test-command }}
+
+  ruff:
+    if: inputs.run-ruff
+    continue-on-error: ${{ inputs.ruff-continue-on-error }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install Ruff
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff==0.16.0
+      - name: Run Ruff
+        run: ruff check ${{ inputs.source-path }} ${{ inputs.test-path }}
+
+  bandit:
+    if: inputs.run-bandit
+    continue-on-error: ${{ inputs.bandit-continue-on-error }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit[toml]
+      - name: Run Bandit
+        run: bandit -c pyproject.toml -r ${{ inputs.source-path }} --severity-level medium
