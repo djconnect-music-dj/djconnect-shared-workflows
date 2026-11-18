@@ -14,3 +14,5 @@ jobs:
         run: node --test tests/evidence-pr-fallback.test.cjs
       - name: Test policy-backed workflow variants
         run: node --test tests/org-policy-variants.test.cjs
+      - name: Test read-only evidence diagnostic
+        run: node --test tests/read-only-evidence-diagnostic.test.cjs
