@@ -88,9 +88,72 @@ jobs:
               throw new Error("repository_role is invalid");
             }
             const commit = await github.rest.repos.getCommit({owner, repo, ref: mainSha});
-            const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({owner, repo, commit_sha: mainSha});
-            const candidates = associated.data.filter(pr => pr.merged_at && pr.base.ref === "main" && pr.merge_commit_sha === mainSha);
-            const pr = candidates.length === 1 ? await github.rest.pulls.get({owner, repo, pull_number: candidates[0].number}) : null;
+            // BEGIN exact-PR fallback. Two identical complete inventories detect
+            // observed pagination drift; they are not an atomic GitHub snapshot.
+            async function resolveOriginatingPR(github, owner, repo, mainSha) {
+              const matches = pr => pr?.merged_at && pr.base?.ref === "main" &&
+                pr.base?.repo?.full_name === `${owner}/${repo}` && pr.merge_commit_sha === mainSha &&
+                Number.isSafeInteger(pr.number) && pr.number > 0;
+              async function inventory(fetchPage, expectedPath) {
+                const rows = [];
+                const numbers = new Set();
+                for (let page = 1; page <= 100; page++) {
+                  const response = await fetchPage(page);
+                  if (!Array.isArray(response.data)) throw new Error("Invalid PR inventory page");
+                  for (const item of response.data) {
+                    if (!Number.isSafeInteger(item.number) || item.number < 1 || numbers.has(item.number) ||
+                        typeof item.updated_at !== "string") throw new Error("Incomplete or duplicate PR inventory");
+                    numbers.add(item.number);
+                    rows.push(item);
+                  }
+                  const link = response.headers?.link;
+                  let next = null;
+                  if (link !== undefined && link !== "") {
+                    if (typeof link !== "string") throw new Error("Invalid pagination Link header");
+                    const relations = new Set();
+                    for (const entry of link.split(",")) {
+                      const match = /^\s*<([^>]+)>;\s*rel="([a-z]+)"\s*$/.exec(entry);
+                      if (!match || relations.has(match[2])) throw new Error("Malformed pagination Link header");
+                      relations.add(match[2]);
+                      if (match[2] === "next") next = match[1];
+                    }
+                  }
+                  if (!next) {
+                    if (response.data.length === 100) throw new Error("Full PR page without next link");
+                    return rows;
+                  }
+                  let nextUrl;
+                  try { nextUrl = new URL(next); } catch { throw new Error("Invalid next URL"); }
+                  if (nextUrl.protocol !== "https:" || nextUrl.hostname !== "api.github.com" || nextUrl.port ||
+                      nextUrl.username || nextUrl.password || nextUrl.hash || nextUrl.pathname !== expectedPath ||
+                      nextUrl.searchParams.getAll("page").length !== 1 || nextUrl.searchParams.get("page") !== String(page + 1) ||
+                      nextUrl.searchParams.getAll("per_page").length !== 1 || nextUrl.searchParams.get("per_page") !== "100")
+                    throw new Error("Unexpected next URL");
+                  if (!response.data.length || page === 100) throw new Error("Incomplete PR pagination");
+                }
+                throw new Error("PR pagination exceeds limit");
+              }
+              const assoc = await inventory(page => github.rest.repos.listPullRequestsAssociatedWithCommit(
+                {owner, repo, commit_sha: mainSha, per_page: 100, page}), `/repos/${owner}/${repo}/commits/${mainSha}/pulls`);
+              let candidates = assoc.filter(matches);
+              if (candidates.length === 0) {
+                const scan = () => inventory(page => github.rest.pulls.list(
+                  {owner, repo, state: "closed", sort: "created", direction: "asc", per_page: 100, page}), `/repos/${owner}/${repo}/pulls`);
+                const first = await scan();
+                const second = await scan();
+                const fingerprint = rows => JSON.stringify(rows.map(pr => [pr.number, pr.updated_at,
+                  pr.merged_at, pr.merge_commit_sha, pr.base?.ref, pr.base?.repo?.full_name]));
+                if (fingerprint(first) !== fingerprint(second)) throw new Error("PR inventory changed during pagination");
+                candidates = second.filter(matches);
+              }
+              if (candidates.length !== 1) return null;
+              const pr = await github.rest.pulls.get({owner, repo, pull_number: candidates[0].number});
+              if (!matches(pr.data) || pr.data.number !== candidates[0].number || pr.data.merged !== true ||
+                  !/^[0-9a-f]{40}$/.test(pr.data.head?.sha || "")) throw new Error("PR readback mismatch");
+              return pr;
+            }
+            const pr = await resolveOriginatingPR(github, owner, repo, mainSha);
+            // END exact-PR fallback.
             const prFiles = pr ? await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.data.number, per_page: 100}) : [];
             const prContexts = pr ? await github.graphql(`query($owner:String!,$repo:String!,$sha:GitObjectID!){repository(owner:$owner,name:$repo){object(oid:$sha){... on Commit {statusCheckRollup {contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context state description}}}}}}}}`, {owner, repo, sha: pr.data.head.sha}) : null;
             const contextNodes = prContexts?.repository?.object?.statusCheckRollup?.contexts?.nodes || [];
