@@ -94,6 +94,7 @@ jobs:
             echo "- Policy source: \`djconnect-music-dj/.github@89a2a8b4c7571965249bed745bf7c5c37a1221f1\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  semgrep:
     name: Semgrep
     continue-on-error: ${{ inputs.continue-on-error }}
     runs-on: ubuntu-latest

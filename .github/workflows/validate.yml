@@ -8,6 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Reject duplicate YAML keys
+        run: ruby scripts/validate_workflow_yaml.rb
+      - name: Test reusable workflow job boundaries
+        run: node --test tests/workflow-job-structure.test.cjs
       - name: Verify trusted delivery bytes
         run: echo "2265c07c075a93504602390ec9c60d40d6ed0643d5235b48002172d1771c2dfc  .github/workflows/trusted-delivery-qualification.yml" | sha256sum --check
       - name: Test evidence provenance fallback

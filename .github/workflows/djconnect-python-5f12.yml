@@ -133,6 +133,7 @@ jobs:
             echo "- Policy source: \`djconnect-music-dj/.github@89a2a8b4c7571965249bed745bf7c5c37a1221f1\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  dependency-audit:
     if: inputs.run-dependency-audit
     continue-on-error: true
     runs-on: ubuntu-latest
