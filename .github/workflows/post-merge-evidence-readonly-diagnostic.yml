@@ -65,7 +65,7 @@ jobs:
       - name: Require exact policy snapshot revision
         env:
           POLICY_REF: ${{ inputs.policy_source_ref }}
-        run: test "$POLICY_REF" = "e02b452ed799b82a05500efbaa5ee41f74a046ed"
+        run: test "$POLICY_REF" = "89a2a8b4c7571965249bed745bf7c5c37a1221f1"
 
       - name: Check out immutable reconciliation policy source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5

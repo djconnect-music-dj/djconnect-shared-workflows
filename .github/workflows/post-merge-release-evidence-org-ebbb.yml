@@ -60,7 +60,7 @@ jobs:
       - name: Require exact policy snapshot revision
         env:
           POLICY_REF: ${{ inputs.policy_source_ref }}
-        run: test "$POLICY_REF" = "e02b452ed799b82a05500efbaa5ee41f74a046ed"
+        run: test "$POLICY_REF" = "89a2a8b4c7571965249bed745bf7c5c37a1221f1"
 
       - name: Check out immutable reconciliation policy source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -261,12 +261,12 @@ jobs:
           )
           # Experimental schema extension; not qualified for publication.
           import hashlib
-          record["policy_source_identity"] = {"repository": "djconnect-music-dj/.github", "repository_id": 1461539726, "revision": "e02b452ed799b82a05500efbaa5ee41f74a046ed", "snapshot": "evidence-ebbb", "original_repository_id": 1258575431, "original_revision": "ebbb35f038a7a3c7d46c12660968bcd50eb67580"}
+          record["policy_source_identity"] = {"repository": "djconnect-music-dj/.github", "repository_id": 1461539726, "revision": "89a2a8b4c7571965249bed745bf7c5c37a1221f1", "snapshot": "evidence-ebbb", "original_repository_id": 1258575431, "original_revision": "ebbb35f038a7a3c7d46c12660968bcd50eb67580"}
           if record["source_revision"] != record["policy_source_identity"]["revision"]:
               raise SystemExit("policy source revision mismatch")
           unsigned = {key: value for key, value in record.items() if key != "integrity"}
           record["integrity"]["digest"] = hashlib.sha256(json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-          findings = validate_record(record, expected_policy_source={"repository": "djconnect-music-dj/.github", "repository_id": 1461539726, "revision": "e02b452ed799b82a05500efbaa5ee41f74a046ed", "snapshot": "evidence-ebbb", "original_repository_id": 1258575431, "original_revision": "ebbb35f038a7a3c7d46c12660968bcd50eb67580"})
+          findings = validate_record(record, expected_policy_source={"repository": "djconnect-music-dj/.github", "repository_id": 1461539726, "revision": "89a2a8b4c7571965249bed745bf7c5c37a1221f1", "snapshot": "evidence-ebbb", "original_repository_id": 1258575431, "original_revision": "ebbb35f038a7a3c7d46c12660968bcd50eb67580"})
           if findings:
               raise SystemExit("durable evidence validation failed: " + "; ".join(findings))
           Path("../../../durable-qualification-evidence.json").write_text(
@@ -304,7 +304,7 @@ jobs:
           from tools.trusted_delivery.evidence_preservation import validate_record
           path = Path("durable-evidence-readback") / f"qualification-evidence-{os.environ['CANDIDATE_SHA']}.json"
           record = json.loads(path.read_text())
-          findings = validate_record(record, expected_policy_source={"repository": "djconnect-music-dj/.github", "repository_id": 1461539726, "revision": "e02b452ed799b82a05500efbaa5ee41f74a046ed", "snapshot": "evidence-ebbb", "original_repository_id": 1258575431, "original_revision": "ebbb35f038a7a3c7d46c12660968bcd50eb67580"})
+          findings = validate_record(record, expected_policy_source={"repository": "djconnect-music-dj/.github", "repository_id": 1461539726, "revision": "89a2a8b4c7571965249bed745bf7c5c37a1221f1", "snapshot": "evidence-ebbb", "original_repository_id": 1258575431, "original_revision": "ebbb35f038a7a3c7d46c12660968bcd50eb67580"})
           if findings:
               raise SystemExit("published durable evidence validation failed: " + "; ".join(findings))
           PY

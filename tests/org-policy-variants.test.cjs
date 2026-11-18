@@ -3,7 +3,7 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {execFileSync} = require('node:child_process');
-const P='e02b452ed799b82a05500efbaa5ee41f74a046ed';
+const P='89a2a8b4c7571965249bed745bf7c5c37a1221f1';
 const variants=[['.github/workflows/software-assurance-governance-org-v1.yml','governance-3d7d'],['.github/workflows/post-merge-release-evidence-org-487.yml','evidence-4877'],['.github/workflows/post-merge-release-evidence-org-ebbb.yml','evidence-ebbb']];
 for (const [file,snapshot] of variants) {
   test(`${snapshot} uses the exact public policy source`,()=>{

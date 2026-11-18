@@ -26,16 +26,16 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const result = await github.request("GET /repositories/{repository_id}", {repository_id: 1258575431});
+            const result = await github.request("GET /repositories/{repository_id}", {repository_id: 1461539726});
             const repo = result.data;
-            if (repo.id !== 1258575431 || repo.private !== false || !["pcvantol/djconnect", "djconnect-music-dj/djconnect"].includes(repo.full_name)) throw new Error("Unexpected canonical policy repository identity");
+            if (repo.id !== 1461539726 || repo.private !== false || repo.full_name !== "djconnect-music-dj/.github") throw new Error("Unexpected canonical policy repository identity");
             core.setOutput("repository", repo.full_name);
 
       - name: Check out pinned canonical policy source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
         with:
           repository: ${{ steps.canonical-source.outputs.repository }}
-          ref: 3d7d24a84b3aaacb8f2fb229e09c33da85e0545d
+          ref: 89a2a8b4c7571965249bed745bf7c5c37a1221f1
           path: canonical-governance
 
       - name: Check out caller workflow source
@@ -44,7 +44,7 @@ jobs:
           path: caller-workflow-source
 
       - name: Validate policy and selected execution profile
-        working-directory: canonical-governance
+        working-directory: canonical-governance/policy-snapshots/governance-3d7d
         env:
           EXECUTION_PROFILE: ${{ inputs.execution_profile }}
           OWNER: ${{ inputs.owner }}
@@ -72,10 +72,10 @@ jobs:
           PY
 
       - name: Require Node 24 or newer for pinned JavaScript actions
-        working-directory: canonical-governance
+        working-directory: canonical-governance/policy-snapshots/governance-3d7d
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python -m tools.software_assurance.validate_action_runtimes ../caller-workflow-source
+        run: python -m tools.software_assurance.validate_action_runtimes "$GITHUB_WORKSPACE/caller-workflow-source"
 
       - name: Publish governance summary
         env:
@@ -89,5 +89,5 @@ jobs:
             echo "- Policy: \`djconnect.software_assurance.ci_governance@1.0.0\`"
             echo "- Execution profile: \`${EXECUTION_PROFILE}\`"
             echo "- Owner: \`${OWNER}\`"
-            echo "- Policy source: \`${POLICY_REPOSITORY}@3d7d24a84b3aaacb8f2fb229e09c33da85e0545d\`"
+            echo "- Policy source: \`${POLICY_REPOSITORY}@89a2a8b4c7571965249bed745bf7c5c37a1221f1\`"
           } >> "$GITHUB_STEP_SUMMARY"
