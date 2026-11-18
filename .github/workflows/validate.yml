@@ -12,3 +12,5 @@ jobs:
         run: echo "2265c07c075a93504602390ec9c60d40d6ed0643d5235b48002172d1771c2dfc  .github/workflows/trusted-delivery-qualification.yml" | sha256sum --check
       - name: Test evidence provenance fallback
         run: node --test tests/evidence-pr-fallback.test.cjs
+      - name: Test policy-backed workflow variants
+        run: node --test tests/org-policy-variants.test.cjs
