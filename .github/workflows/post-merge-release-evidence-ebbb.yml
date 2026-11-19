@@ -90,11 +90,12 @@ jobs:
             const commit = await github.rest.repos.getCommit({owner, repo, ref: mainSha});
             // BEGIN exact-PR fallback. Two identical complete inventories detect
             // observed pagination drift; they are not an atomic GitHub snapshot.
-            async function resolveOriginatingPR(github, owner, repo, mainSha) {
+            async function resolveOriginatingPR(github, owner, repo, mainSha, repoId) {
+              if (!Number.isSafeInteger(repoId) || repoId <= 0) throw new Error("Repository identity unavailable");
               const matches = pr => pr?.merged_at && pr.base?.ref === "main" &&
                 pr.base?.repo?.full_name === `${owner}/${repo}` && pr.merge_commit_sha === mainSha &&
                 Number.isSafeInteger(pr.number) && pr.number > 0;
-              async function inventory(fetchPage, expectedPath) {
+              async function inventory(fetchPage, expectedPath, idPath) {
                 const rows = [];
                 const numbers = new Set();
                 for (let page = 1; page <= 100; page++) {
@@ -125,7 +126,7 @@ jobs:
                   let nextUrl;
                   try { nextUrl = new URL(next); } catch { throw new Error("Invalid next URL"); }
                   if (nextUrl.protocol !== "https:" || nextUrl.hostname !== "api.github.com" || nextUrl.port ||
-                      nextUrl.username || nextUrl.password || nextUrl.hash || nextUrl.pathname !== expectedPath ||
+                      nextUrl.username || nextUrl.password || nextUrl.hash || ![expectedPath, idPath].includes(nextUrl.pathname) ||
                       nextUrl.searchParams.getAll("page").length !== 1 || nextUrl.searchParams.get("page") !== String(page + 1) ||
                       nextUrl.searchParams.getAll("per_page").length !== 1 || nextUrl.searchParams.get("per_page") !== "100")
                     throw new Error("Unexpected next URL");
@@ -134,11 +135,11 @@ jobs:
                 throw new Error("PR pagination exceeds limit");
               }
               const assoc = await inventory(page => github.rest.repos.listPullRequestsAssociatedWithCommit(
-                {owner, repo, commit_sha: mainSha, per_page: 100, page}), `/repos/${owner}/${repo}/commits/${mainSha}/pulls`);
+                {owner, repo, commit_sha: mainSha, per_page: 100, page}), `/repos/${owner}/${repo}/commits/${mainSha}/pulls`, `/repositories/${repoId}/commits/${mainSha}/pulls`);
               let candidates = assoc.filter(matches);
               if (candidates.length === 0) {
                 const scan = () => inventory(page => github.rest.pulls.list(
-                  {owner, repo, state: "closed", sort: "created", direction: "asc", per_page: 100, page}), `/repos/${owner}/${repo}/pulls`);
+                  {owner, repo, state: "closed", sort: "created", direction: "asc", per_page: 100, page}), `/repos/${owner}/${repo}/pulls`, `/repositories/${repoId}/pulls`);
                 const first = await scan();
                 const second = await scan();
                 const fingerprint = rows => JSON.stringify(rows.map(pr => [pr.number, pr.updated_at,
@@ -152,7 +153,7 @@ jobs:
                   !/^[0-9a-f]{40}$/.test(pr.data.head?.sha || "")) throw new Error("PR readback mismatch");
               return pr;
             }
-            const pr = await resolveOriginatingPR(github, owner, repo, mainSha);
+            const pr = await resolveOriginatingPR(github, owner, repo, mainSha, context.payload.repository?.id);
             // END exact-PR fallback.
             const prFiles = pr ? await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.data.number, per_page: 100}) : [];
             const prContexts = pr ? await github.graphql(`query($owner:String!,$repo:String!,$sha:GitObjectID!){repository(owner:$owner,name:$repo){object(oid:$sha){... on Commit {statusCheckRollup {contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context state description}}}}}}}}`, {owner, repo, sha: pr.data.head.sha}) : null;
