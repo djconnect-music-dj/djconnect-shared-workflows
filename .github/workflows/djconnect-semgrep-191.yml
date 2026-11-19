@@ -1,0 +1,114 @@
+name: DJConnect shared Semgrep CI
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: Semgrep config path or URL.
+        required: false
+        type: string
+        default: ""
+      continue-on-error:
+        description: Report Semgrep results without failing the workflow.
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  software-assurance-governance:
+    name: Software Assurance governance / Validate canonical governance policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - id: canonical-source
+        name: Resolve canonical policy repository by immutable ID
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const result = await github.request("GET /repositories/{repository_id}", {repository_id: 1461539726});
+            const repo = result.data;
+            if (repo.id !== 1461539726 || repo.private !== false || repo.full_name !== "djconnect-music-dj/.github") throw new Error("Unexpected canonical policy repository identity");
+            core.setOutput("repository", repo.full_name);
+
+      - name: Check out pinned canonical policy source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: ${{ steps.canonical-source.outputs.repository }}
+          ref: 89a2a8b4c7571965249bed745bf7c5c37a1221f1
+          path: canonical-governance
+
+      - name: Check out caller workflow source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          path: caller-workflow-source
+
+      - name: Validate policy and selected execution profile
+        working-directory: canonical-governance/policy-snapshots/governance-631f
+        env:
+          EXECUTION_PROFILE: balanced
+          OWNER: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python -m tools.software_assurance.validate
+          python - <<'PY'
+          import os
+
+          from tools.software_assurance.policy import validate_rollout_candidate
+
+          findings = validate_rollout_candidate(
+              {
+                  "name": os.environ["OWNER"],
+                  "execution_profile": os.environ["EXECUTION_PROFILE"],
+                  "policy_version": "1.0.0",
+                  "timeout_minutes": 10,
+                  "permissions": {"contents": "read"},
+                  "concurrency_group": "software-assurance-governance",
+                  "action_pinning": "full_length_commit_sha",
+              }
+          )
+          if findings:
+              raise SystemExit("; ".join(findings))
+          PY
+
+      - name: Require Node 24 or newer for pinned JavaScript actions
+        working-directory: canonical-governance/policy-snapshots/governance-631f
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m tools.software_assurance.validate_action_runtimes ../../../caller-workflow-source
+
+      - name: Publish governance summary
+        env:
+          EXECUTION_PROFILE: balanced
+          OWNER: ${{ github.repository }}
+        run: |
+          {
+            echo "## Software Assurance governance"
+            echo
+            echo "- Policy: \`djconnect.software_assurance.ci_governance@1.0.0\`"
+            echo "- Execution profile: \`${EXECUTION_PROFILE}\`"
+            echo "- Owner: \`${OWNER}\`"
+            echo "- Policy source: \`djconnect-music-dj/.github@89a2a8b4c7571965249bed745bf7c5c37a1221f1\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  semgrep:
+    name: Semgrep
+    continue-on-error: ${{ inputs.continue-on-error }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: canonical-source
+        name: Resolve canonical configuration repository by immutable ID
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const result = await github.request("GET /repositories/{repository_id}", {repository_id: 1258575431});
+            const repo = result.data;
+            if (repo.id !== 1258575431 || repo.private !== false || repo.full_name !== "djconnect-music-dj/djconnect") throw new Error("Unexpected canonical configuration repository identity");
+            core.setOutput("repository", repo.full_name);
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1
+        with:
+          config: ${{ inputs.config || format('https://raw.githubusercontent.com/{0}/main/.semgrep/djconnect-security.yml', steps.canonical-source.outputs.repository) }}
